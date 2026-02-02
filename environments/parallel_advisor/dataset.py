@@ -384,6 +384,287 @@ int main() {
 ]
 
 
+# GPU-suitable samples (added for Phase 2)
+GPU_DATASET = [
+    CodeSample(
+        id="saxpy",
+        description="SAXPY: y = a*x + y (classic GPU benchmark)",
+        code='''#include <iostream>
+#include <vector>
+#include <chrono>
+
+void saxpy(float a, const std::vector<float>& x, std::vector<float>& y, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        y[i] = a * x[i] + y[i];
+    }
+}
+
+int main() {
+    const size_t N = 100000000;
+    std::vector<float> x(N, 1.0f);
+    std::vector<float> y(N, 2.0f);
+    float a = 3.0f;
+    
+    auto start = std::chrono::high_resolution_clock::now();
+    saxpy(a, x, y, N);
+    auto end = std::chrono::high_resolution_clock::now();
+    
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    std::cout << "y[0]: " << y[0] << std::endl;
+    std::cout << "Time: " << duration.count() << " ms" << std::endl;
+    return 0;
+}''',
+        hardware=HardwareSpec(cores=8, threads=16, gpu=True, gpu_name="NVIDIA A100"),
+        best_strategy="cuda",
+        best_threads=None,
+        expected_speedup=50.0,
+        tags=["gpu-ideal", "memory-bound", "embarrassingly-parallel"],
+        difficulty="easy",
+    ),
+    
+    CodeSample(
+        id="large_matrix_multiply",
+        description="Large dense matrix multiplication (GPU-ideal)",
+        code='''#include <iostream>
+#include <vector>
+#include <chrono>
+
+void matmul(const std::vector<float>& A,
+            const std::vector<float>& B,
+            std::vector<float>& C,
+            int N) {
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            float sum = 0.0f;
+            for (int k = 0; k < N; k++) {
+                sum += A[i * N + k] * B[k * N + j];
+            }
+            C[i * N + j] = sum;
+        }
+    }
+}
+
+int main() {
+    const int N = 2048;
+    std::vector<float> A(N * N, 1.0f);
+    std::vector<float> B(N * N, 2.0f);
+    std::vector<float> C(N * N, 0.0f);
+    
+    auto start = std::chrono::high_resolution_clock::now();
+    matmul(A, B, C, N);
+    auto end = std::chrono::high_resolution_clock::now();
+    
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    std::cout << "C[0]: " << C[0] << std::endl;
+    std::cout << "Time: " << duration.count() << " ms" << std::endl;
+    return 0;
+}''',
+        hardware=HardwareSpec(cores=8, threads=16, gpu=True, gpu_name="NVIDIA A100"),
+        best_strategy="cuda",
+        best_threads=None,
+        expected_speedup=100.0,
+        tags=["gpu-ideal", "compute-bound", "matmul"],
+        difficulty="medium",
+    ),
+    
+    CodeSample(
+        id="vector_reduction",
+        description="Large vector reduction (sum)",
+        code='''#include <iostream>
+#include <vector>
+#include <chrono>
+
+double reduce_sum(const std::vector<double>& arr, size_t n) {
+    double sum = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        sum += arr[i];
+    }
+    return sum;
+}
+
+int main() {
+    const size_t N = 500000000;
+    std::vector<double> arr(N, 0.001);
+    
+    auto start = std::chrono::high_resolution_clock::now();
+    double result = reduce_sum(arr, N);
+    auto end = std::chrono::high_resolution_clock::now();
+    
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    std::cout << "Sum: " << result << std::endl;
+    std::cout << "Time: " << duration.count() << " ms" << std::endl;
+    return 0;
+}''',
+        hardware=HardwareSpec(cores=8, threads=16, gpu=True, gpu_name="NVIDIA A100"),
+        best_strategy="cuda",  # Parallel reduction on GPU
+        best_threads=None,
+        expected_speedup=20.0,
+        tags=["reduction", "gpu-suitable", "memory-bound"],
+        difficulty="medium",
+    ),
+    
+    CodeSample(
+        id="image_blur",
+        description="2D convolution / image blur (stencil operation)",
+        code='''#include <iostream>
+#include <vector>
+#include <chrono>
+
+void blur(const std::vector<float>& input,
+          std::vector<float>& output,
+          int width, int height) {
+    // 3x3 box blur
+    for (int y = 1; y < height - 1; y++) {
+        for (int x = 1; x < width - 1; x++) {
+            float sum = 0.0f;
+            for (int dy = -1; dy <= 1; dy++) {
+                for (int dx = -1; dx <= 1; dx++) {
+                    sum += input[(y + dy) * width + (x + dx)];
+                }
+            }
+            output[y * width + x] = sum / 9.0f;
+        }
+    }
+}
+
+int main() {
+    const int WIDTH = 4096;
+    const int HEIGHT = 4096;
+    std::vector<float> input(WIDTH * HEIGHT, 1.0f);
+    std::vector<float> output(WIDTH * HEIGHT, 0.0f);
+    
+    auto start = std::chrono::high_resolution_clock::now();
+    blur(input, output, WIDTH, HEIGHT);
+    auto end = std::chrono::high_resolution_clock::now();
+    
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    std::cout << "output[center]: " << output[HEIGHT/2 * WIDTH + WIDTH/2] << std::endl;
+    std::cout << "Time: " << duration.count() << " ms" << std::endl;
+    return 0;
+}''',
+        hardware=HardwareSpec(cores=8, threads=16, gpu=True, gpu_name="NVIDIA A100"),
+        best_strategy="cuda",
+        best_threads=None,
+        expected_speedup=30.0,
+        tags=["stencil", "2d", "gpu-ideal", "image-processing"],
+        difficulty="medium",
+    ),
+    
+    CodeSample(
+        id="small_vector_add",
+        description="Small vector addition - GPU overhead may hurt",
+        code='''#include <iostream>
+#include <vector>
+#include <chrono>
+
+void vector_add(const std::vector<float>& a,
+                const std::vector<float>& b,
+                std::vector<float>& c,
+                size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        c[i] = a[i] + b[i];
+    }
+}
+
+int main() {
+    const size_t N = 1000;  // Very small!
+    std::vector<float> a(N, 1.0f);
+    std::vector<float> b(N, 2.0f);
+    std::vector<float> c(N);
+    
+    auto start = std::chrono::high_resolution_clock::now();
+    for (int iter = 0; iter < 10000; iter++) {
+        vector_add(a, b, c, N);
+    }
+    auto end = std::chrono::high_resolution_clock::now();
+    
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    std::cout << "c[0]: " << c[0] << std::endl;
+    std::cout << "Time: " << duration.count() << " ms" << std::endl;
+    return 0;
+}''',
+        hardware=HardwareSpec(cores=8, threads=16, gpu=True, gpu_name="NVIDIA A100"),
+        best_strategy="openmp",  # GPU transfer overhead would dominate!
+        best_threads=4,
+        expected_speedup=2.0,
+        tags=["too-small-for-gpu", "transfer-overhead"],
+        difficulty="medium",
+    ),
+    
+    CodeSample(
+        id="nbody",
+        description="N-body gravitational simulation",
+        code='''#include <iostream>
+#include <vector>
+#include <chrono>
+#include <cmath>
+
+struct Body {
+    float x, y, z;
+    float vx, vy, vz;
+    float mass;
+};
+
+void nbody_step(std::vector<Body>& bodies, float dt, int n) {
+    const float G = 6.67430e-11f;
+    const float softening = 1e-9f;
+    
+    // Compute forces and update velocities
+    for (int i = 0; i < n; i++) {
+        float fx = 0.0f, fy = 0.0f, fz = 0.0f;
+        for (int j = 0; j < n; j++) {
+            if (i == j) continue;
+            float dx = bodies[j].x - bodies[i].x;
+            float dy = bodies[j].y - bodies[i].y;
+            float dz = bodies[j].z - bodies[i].z;
+            float dist = std::sqrt(dx*dx + dy*dy + dz*dz + softening);
+            float force = G * bodies[i].mass * bodies[j].mass / (dist * dist * dist);
+            fx += force * dx;
+            fy += force * dy;
+            fz += force * dz;
+        }
+        bodies[i].vx += fx * dt / bodies[i].mass;
+        bodies[i].vy += fy * dt / bodies[i].mass;
+        bodies[i].vz += fz * dt / bodies[i].mass;
+    }
+    
+    // Update positions
+    for (int i = 0; i < n; i++) {
+        bodies[i].x += bodies[i].vx * dt;
+        bodies[i].y += bodies[i].vy * dt;
+        bodies[i].z += bodies[i].vz * dt;
+    }
+}
+
+int main() {
+    const int N = 10000;
+    std::vector<Body> bodies(N);
+    
+    for (int i = 0; i < N; i++) {
+        bodies[i] = {(float)i, (float)(i*2), (float)(i*3), 0, 0, 0, 1.0f};
+    }
+    
+    auto start = std::chrono::high_resolution_clock::now();
+    for (int step = 0; step < 10; step++) {
+        nbody_step(bodies, 0.01f, N);
+    }
+    auto end = std::chrono::high_resolution_clock::now();
+    
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    std::cout << "bodies[0].x: " << bodies[0].x << std::endl;
+    std::cout << "Time: " << duration.count() << " ms" << std::endl;
+    return 0;
+}''',
+        hardware=HardwareSpec(cores=8, threads=16, gpu=True, gpu_name="NVIDIA A100"),
+        best_strategy="cuda",
+        best_threads=None,
+        expected_speedup=50.0,
+        tags=["nbody", "O(n^2)", "compute-bound", "gpu-ideal"],
+        difficulty="hard",
+    ),
+]
+
+
 def load_dataset(
     name: str = "basic",
     hardware_override: Optional[HardwareSpec] = None,
@@ -392,16 +673,20 @@ def load_dataset(
     Load a dataset of code samples.
     
     Args:
-        name: Dataset name ("basic", "polybench", "custom")
+        name: Dataset name ("basic", "gpu", "full")
         hardware_override: Override hardware spec for all samples
     
     Returns:
         List of CodeSample objects
     """
     if name == "basic":
-        dataset = BASIC_DATASET
+        dataset = list(BASIC_DATASET)  # Copy to avoid mutation
+    elif name == "gpu":
+        dataset = list(GPU_DATASET)
+    elif name == "full":
+        dataset = list(BASIC_DATASET) + list(GPU_DATASET)
     else:
-        raise ValueError(f"Unknown dataset: {name}")
+        raise ValueError(f"Unknown dataset: {name}. Available: basic, gpu, full")
     
     # Override hardware if specified
     if hardware_override:

@@ -32,6 +32,17 @@ class CompileResult:
 
 def get_compile_command(filepath: str, strategy: str, output: str) -> list[str]:
     """Get compilation command for the given strategy."""
+    if strategy == "cuda":
+        # CUDA compilation with nvcc
+        return [
+            "nvcc",
+            "-O3",
+            "-std=c++17",
+            "--gpu-architecture=sm_70",  # Volta and newer
+            filepath,
+            "-o", output
+        ]
+    
     base_cmd = ["g++", "-O3", "-std=c++17"]
     
     if strategy == "openmp":
@@ -41,6 +52,11 @@ def get_compile_command(filepath: str, strategy: str, output: str) -> list[str]:
     # serial needs no extra flags
     
     return base_cmd + [filepath, "-o", output]
+
+
+def get_file_extension(strategy: str) -> str:
+    """Get appropriate file extension for the strategy."""
+    return ".cu" if strategy == "cuda" else ".cpp"
 
 
 def extract_time_from_output(output: str) -> Optional[float]:
@@ -64,25 +80,33 @@ async def compile_and_run(
     threads: Optional[int],
     original_code: str,
     timeout_seconds: float = 60.0,
+    gpu_available: bool = False,
 ) -> CompileResult:
     """
     Compile and run the parallelized code, comparing with original.
     
     Args:
         code: Parallelized code to test
-        strategy: "serial", "threads", or "openmp"
+        strategy: "serial", "threads", "openmp", or "cuda"
         threads: Number of threads (for threads/openmp)
         original_code: Original serial code for comparison
         timeout_seconds: Max time for compilation + execution
+        gpu_available: Whether GPU compilation should be attempted
     
     Returns:
         CompileResult with compilation status, correctness, and speedup
     """
     result = CompileResult(compiled=False)
     
+    # Check if CUDA requested but no GPU
+    if strategy == "cuda" and not gpu_available:
+        result.compile_error = "CUDA requested but no GPU available"
+        return result
+    
     with tempfile.TemporaryDirectory() as tmpdir:
-        # Write parallel code
-        parallel_src = os.path.join(tmpdir, "parallel.cpp")
+        # Write parallel code with appropriate extension
+        ext = get_file_extension(strategy)
+        parallel_src = os.path.join(tmpdir, f"parallel{ext}")
         parallel_bin = os.path.join(tmpdir, "parallel")
         with open(parallel_src, "w") as f:
             f.write(code)

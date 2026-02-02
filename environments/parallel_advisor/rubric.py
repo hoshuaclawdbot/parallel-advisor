@@ -33,13 +33,13 @@ def parse_recommendation(completion: str) -> ParsedRecommendation:
     THREADS: <N or N/A>
     REASONING: <text>
     CODE:
-    ```cpp
+    ```cpp or ```cuda
     <code>
     ```
     """
     try:
         # Extract recommendation
-        rec_match = re.search(r'RECOMMENDATION:\s*(SERIAL|THREADS\(\d+\)|OPENMP\(\d+\))', completion, re.IGNORECASE)
+        rec_match = re.search(r'RECOMMENDATION:\s*(SERIAL|THREADS\(\d+\)|OPENMP\(\d+\)|CUDA)', completion, re.IGNORECASE)
         if not rec_match:
             return ParsedRecommendation(
                 strategy="unknown",
@@ -61,6 +61,9 @@ def parse_recommendation(completion: str) -> ParsedRecommendation:
         elif rec_str.startswith("OPENMP"):
             strategy = "openmp"
             threads = int(re.search(r'\((\d+)\)', rec_str).group(1))
+        elif rec_str == "CUDA":
+            strategy = "cuda"
+            threads = None
         else:
             strategy = "unknown"
             threads = None
@@ -69,8 +72,8 @@ def parse_recommendation(completion: str) -> ParsedRecommendation:
         reasoning_match = re.search(r'REASONING:\s*(.+?)(?=CODE:|$)', completion, re.DOTALL | re.IGNORECASE)
         reasoning = reasoning_match.group(1).strip() if reasoning_match else ""
         
-        # Extract code
-        code_match = re.search(r'```cpp\s*\n(.*?)\n```', completion, re.DOTALL)
+        # Extract code (try cpp, cuda, c++, or no specifier)
+        code_match = re.search(r'```(?:cpp|cuda|c\+\+)?\s*\n(.*?)\n```', completion, re.DOTALL)
         if not code_match:
             # Try without language specifier
             code_match = re.search(r'```\s*\n(.*?)\n```', completion, re.DOTALL)
@@ -111,11 +114,13 @@ class ParallelAdvisorRubric(vf.Rubric):
         correctness_weight: float = 0.3,
         speedup_weight: float = 0.5,
         max_speedup_reward: float = 10.0,  # Speedup of 10x = max reward
+        gpu_available: bool = False,
     ):
         self.compile_weight = compile_weight
         self.correctness_weight = correctness_weight
         self.speedup_weight = speedup_weight
         self.max_speedup_reward = max_speedup_reward
+        self.gpu_available = gpu_available
         
         super().__init__(funcs=[self.score_recommendation])
     
@@ -156,6 +161,7 @@ class ParallelAdvisorRubric(vf.Rubric):
             strategy=rec.strategy,
             threads=rec.threads,
             original_code=sample.code,
+            gpu_available=self.gpu_available,
         )
         
         if not result.compiled:
