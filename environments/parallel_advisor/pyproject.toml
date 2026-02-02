@@ -1,0 +1,15 @@
+[project]
+name = "parallel-advisor"
+version = "0.1.0"
+description = "LLM-based parallelization strategy advisor using Prime Intellect Verifiers"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "verifiers>=0.1.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+]
